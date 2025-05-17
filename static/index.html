@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fruit Classifier</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            color: #1a73e8;
+            text-align: center;
+            margin-bottom: 30px;
+            width: 100%;
+        }
+
+        .upload-container {
+            border: 2px dashed #1a73e8;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .upload-container:hover {
+            border-color: #174ea6;
+            background: #f8f9fa;
+        }
+
+        #upload-label {
+            color: #5f6368;
+            font-size: 1.1em;
+        }
+
+        .image-preview-container {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px 0;
+        }
+
+        #imagePreview {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            display: none;
+            object-fit: contain;
+        }
+
+        #result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            background: #e8f0fe;
+            display: none;
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        .prediction {
+            font-size: 1.2em;
+            color: #1967d2;
+            font-weight: bold;
+        }
+
+        .confidence {
+            color: #5f6368;
+            margin-top: 10px;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .loading {
+            display: none;
+            margin: 20px 0;
+            text-align: center;
+            color: #5f6368;
+            width: 100%;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #1a73e8;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🍎 Fruit Classifier</h1>
+        
+        <div class="upload-container" onclick="document.getElementById('fileInput').click()">
+            <label id="upload-label">
+                Click or drag to upload an image
+            </label>
+        </div>
+
+        <input type="file" id="fileInput" accept="image/*">
+        <div class="image-preview-container">
+            <img id="imagePreview" alt="Preview">
+        </div>
+        
+        <div class="loading" id="loading">
+            Analyzing image...
+        </div>
+
+        <div id="result">
+            <div class="prediction">Prediction: <span id="predictionText"></span></div>
+            <div class="confidence">Confidence: <span id="confidenceText"></span>%</div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const imagePreview = document.getElementById('imagePreview');
+        const result = document.getElementById('result');
+        const loading = document.getElementById('loading');
+        const predictionText = document.getElementById('predictionText');
+        const confidenceText = document.getElementById('confidenceText');
+
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                // Show image preview
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imagePreview.src = e.target.result;
+                    imagePreview.style.display = 'block';
+                }
+                reader.readAsDataURL(file);
+
+                // Show loading
+                loading.style.display = 'block';
+                result.style.display = 'none';
+
+                // Send to API
+                const formData = new FormData();
+                formData.append('file', file);
+
+                fetch('/predict/', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    loading.style.display = 'none';
+                    result.style.display = 'block';
+                    
+                    // Capitalize first letter and remove underscores
+                    const formattedClass = data.predicted_class
+                        .split('_')
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                        .join(' ');
+                    
+                    predictionText.textContent = formattedClass;
+                    confidenceText.textContent = (data.confidence * 100).toFixed(2);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    loading.style.display = 'none';
+                    alert('Error analyzing image. Please try again.');
+                });
+            }
+        });
+    </script>
+</body>
+</html> 
