@@ -4,10 +4,43 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 import torch
 import torch.nn as nn
-from torchvision import transforms, models
+from torchvision import transforms
 from PIL import Image
 import io
 import os
+
+# Define the same model architecture as in train.py
+class LightweightFruitClassifier(nn.Module):
+    def __init__(self, num_classes):
+        super(LightweightFruitClassifier, self).__init__()
+        
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+        )
+        
+        self.classifier = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(64 * 28 * 28, 256),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(256, num_classes)
+        )
+
+    def forward(self, x):
+        x = self.features(x)
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
+        return x
 
 app = FastAPI()
 
@@ -33,19 +66,12 @@ if not os.path.exists(MODEL_PATH) or not os.path.exists(MAPPING_PATH):
 try:
     # Load the model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = models.resnet18(weights=None)  # Initialize without pre-trained weights
-    num_classes = 10  # Number of fruit classes
-    model.fc = nn.Linear(model.fc.in_features, num_classes)
-    
-    if os.path.exists(MODEL_PATH):
-        model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-        model.eval()
+    model = LightweightFruitClassifier(num_classes=10)  # Number of fruit classes
+    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+    model.eval()
     
     # Load class mapping
-    if os.path.exists(MAPPING_PATH):
-        idx_to_class = torch.load(MAPPING_PATH)
-    else:
-        idx_to_class = {}
+    idx_to_class = torch.load(MAPPING_PATH)
 except Exception as e:
     print(f"Error loading model: {str(e)}")
 
@@ -66,7 +92,7 @@ async def predict_image(file: UploadFile = File(...)):
     if not os.path.exists(MODEL_PATH) or not os.path.exists(MAPPING_PATH):
         raise HTTPException(
             status_code=500,
-            detail="Model not found. Please train the model first by running train.py"
+            detail="Model not found. Please run train.py first to train the model"
         )
     
     try:
