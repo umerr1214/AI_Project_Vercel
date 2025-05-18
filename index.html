@@ -118,7 +118,7 @@
     <script>
         let session;
         let classMapping;
-        const modelPath = 'model/model.onnx';
+        const modelPath = 'static/model/model.onnx';
         
         // DOM Elements
         const uploadArea = document.getElementById('upload-area');
@@ -138,7 +138,7 @@
                 session = await ort.InferenceSession.create(modelPath);
                 
                 // Load class mapping
-                const response = await fetch('class_mapping.json');
+                const response = await fetch('static/class_mapping.json');
                 classMapping = await response.json();
                 
                 modelStatus.textContent = 'Model ready!';
@@ -256,12 +256,12 @@
             e.preventDefault();
             uploadArea.classList.remove('dragover');
             const file = e.dataTransfer.files[0];
-            if (file) handleFile(file);
+            handleFile(file);
         });
 
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
-            if (file) handleFile(file);
+            handleFile(file);
         });
 
         // Initialize
