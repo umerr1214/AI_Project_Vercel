@@ -1,7 +1,8 @@
-torch==2.2.1
-torchvision==0.17.1
+--find-links https://download.pytorch.org/whl/torch_stable.html
+torch==2.2.2+cpu
+torchvision==0.17.2+cpu
 fastapi==0.109.2
 python-multipart==0.0.9
 pillow==10.2.0
 uvicorn==0.27.1
-numpy==1.26.4 
+pydantic==2.6.1 

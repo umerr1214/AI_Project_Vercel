@@ -4,42 +4,54 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 import torch
 import torch.nn as nn
+import torch.quantization
 from torchvision import transforms
 from PIL import Image
 import io
 import os
 
-# Define the same model architecture as in train.py
-class LightweightFruitClassifier(nn.Module):
+class DepthwiseSeparableConv(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
+        super(DepthwiseSeparableConv, self).__init__()
+        self.depthwise = nn.Conv2d(in_channels, in_channels, kernel_size=kernel_size,
+                                  stride=stride, padding=padding, groups=in_channels)
+        self.pointwise = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+
+    def forward(self, x):
+        x = self.depthwise(x)
+        x = self.pointwise(x)
+        return x
+
+class MicroFruitClassifier(nn.Module):
     def __init__(self, num_classes):
-        super(LightweightFruitClassifier, self).__init__()
+        super(MicroFruitClassifier, self).__init__()
         
+        self.quant = torch.quantization.QuantStub()
         self.features = nn.Sequential(
-            nn.Conv2d(3, 16, kernel_size=3, padding=1),
+            DepthwiseSeparableConv(3, 8),
+            nn.ReLU(),
+            nn.MaxPool2d(4, 4),
+            
+            DepthwiseSeparableConv(8, 16),
             nn.ReLU(),
             nn.MaxPool2d(2, 2),
             
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            DepthwiseSeparableConv(16, 32),
             nn.ReLU(),
-            nn.MaxPool2d(2, 2),
-            
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2),
+            nn.AdaptiveAvgPool2d((4, 4))
         )
         
         self.classifier = nn.Sequential(
-            nn.Dropout(0.5),
-            nn.Linear(64 * 28 * 28, 256),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(256, num_classes)
+            nn.Linear(32 * 4 * 4, num_classes)
         )
+        self.dequant = torch.quantization.DeQuantStub()
 
     def forward(self, x):
+        x = self.quant(x)
         x = self.features(x)
         x = torch.flatten(x, 1)
         x = self.classifier(x)
+        x = self.dequant(x)
         return x
 
 app = FastAPI()
@@ -64,10 +76,14 @@ if not os.path.exists(MODEL_PATH) or not os.path.exists(MAPPING_PATH):
     print("Model files not found. Please run train.py first to train the model.")
 
 try:
-    # Load the model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = LightweightFruitClassifier(num_classes=10)  # Number of fruit classes
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+    # Initialize the model with quantization
+    model = MicroFruitClassifier(num_classes=10)
+    model.qconfig = torch.quantization.get_default_qconfig('fbgemm')
+    model = torch.quantization.prepare(model)
+    model = torch.quantization.convert(model)
+    
+    # Load the state dict
+    model.load_state_dict(torch.load(MODEL_PATH, map_location='cpu'))
     model.eval()
     
     # Load class mapping
@@ -75,9 +91,9 @@ try:
 except Exception as e:
     print(f"Error loading model: {str(e)}")
 
-# Image transforms
+# Image transforms with smaller size
 transform = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize((96, 96)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
@@ -99,7 +115,7 @@ async def predict_image(file: UploadFile = File(...)):
         # Read and transform image
         image_data = await file.read()
         image = Image.open(io.BytesIO(image_data)).convert('RGB')
-        image_tensor = transform(image).unsqueeze(0).to(device)
+        image_tensor = transform(image).unsqueeze(0)
         
         # Make prediction
         with torch.no_grad():

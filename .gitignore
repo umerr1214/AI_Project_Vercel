@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -6,8 +7,15 @@ __pycache__/
 env/
 venv/
 ENV/
+
+# Development
 .vercel
 .DS_Store
 *.log
-prepare_model.py
+
+# Training related
+train.py
+convert_model.py
 fruit_dataset/
+fruit_classifier.pth
+class_mapping.pth
